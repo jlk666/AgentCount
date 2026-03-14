@@ -1,0 +1,31 @@
+# Python cache and virtualenvs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# ML model weights and checkpoints (large files)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+*.pb
+*.h5
+*.tflite
+*.engine
+checkpoints/
+
+# Generated outputs and local test assets
+plate_count_ai/outputs/
+testPngs/
+
+# Common large archives/artifacts
+*.zip
+*.tar
+*.tar.gz
+*.7z

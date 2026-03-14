@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-multipart
+langgraph
+opencv-python
+scikit-image
+numpy
+matplotlib
+pandas
+torch
+torchvision
+einops
+segment-anything
+git+https://github.com/facebookresearch/sam3.git
+psycopg2-binary
