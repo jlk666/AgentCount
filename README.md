@@ -1,7 +1,17 @@
 # AgentCount
 
+<p align="center">
+  <img src="AgentCountLogo.png" alt="AgentCount Logo" width="300"/>
+</p>
+
 AgentCount is a Python project for agar plate colony counting and CFU estimation.  
 It uses a multi-agent workflow (LangGraph) with SAM-based segmentation/detection, QC, validation, and reporting.
+
+## Abstract Overview
+
+Rapid and reproducible colony enumeration remains a bottleneck in microbiology workflows, particularly for high-throughput plate-based assays where manual counting is labor-intensive and variable across operators. We developed AgentCount, a modular AI workflow for automated colony counting and CFU/mL estimation from agar plate images. The framework combines staged quality control, plate-region segmentation, prompt-guided segmentation with Segment Anything Model 3 (SAM3), morphology-aware filtering (area ratio, circularity, non-maximum suppression), counting, CFU computation, and report generation. AgentCount supports both single-image and batch inference and exports traceable intermediate artifacts, including raw SAM mask overlays, to improve interpretability and debugging.
+
+To improve detection robustness across visually heterogeneous plates, we implemented prompt ensembling and image enhancement (contrast-limited adaptive histogram equalization plus mild sharpening) prior to SAM3 inference. In internal evaluations, prompt and preprocessing choices substantially influenced recall, while postprocessing reduced duplicate and spurious detections. The workflow produced machine-readable JSON and CSV outputs and enabled reproducible processing of synthetic and challenging test sets with configurable metadata (sample ID, dilution, plated volume, replicate ID). These results demonstrate that an agentic, modular vision pipeline can support scalable colony quantification and standardized CFU reporting in microbiology imaging workflows.
 
 ## Quick Setup
 
