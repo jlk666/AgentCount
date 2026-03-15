@@ -53,13 +53,15 @@ python download_models.py --skip-sam3
 
 ## Run the Project
 
-### CLI (single image)
+### Single Image (CLI)
+
+Minimal run:
 
 ```bash
 python main.py --image /path/to/plate_image.png
 ```
 
-Optional metadata:
+Run with explicit metadata:
 
 ```bash
 python main.py \
@@ -67,10 +69,50 @@ python main.py \
   --metadata '{"sample_id":"sample_001","dilution":0.01,"volume":0.1,"replicate_id":"r1"}'
 ```
 
-### CLI (batch folder)
+Run with SAM3 backend options:
+
+```bash
+python main.py \
+  --image /path/to/plate_image.png \
+  --sam-backend sam3 \
+  --checkpoint checkpoints/sam3.pt \
+  --sam-text-prompt "small circular colonies on TSA agar"
+```
+
+### Batch Run (Folder)
+
+Use one metadata template for all images in a folder:
 
 ```bash
 python main.py --batch-dir /path/to/folder_with_images
+```
+
+### Batch Run (CSV - Recommended)
+
+Use per-image metadata from a CSV file:
+
+```csv
+image_path,sample_id,dilution,volume,replicate_id
+SyntheticData/Day14-TSA-r1.png,Day14-TSA,0.01,0.1,r1
+SyntheticData/Day14-TSA-r2.png,Day14-TSA,0.01,0.1,r2
+```
+
+Run:
+
+```bash
+python main.py --batch-csv SyntheticData/input_parameters.csv
+```
+
+Optional SAM3 prompt ensemble (pipe-separated):
+
+```bash
+SAM_TEXT_PROMPTS='small circular light-brown colonies on TSA agar plate interior|discrete circular colonies on tryptic soy agar|round isolated colony spots on agar surface' \
+SAM_ENABLE_IMAGE_ENHANCEMENT=1 \
+python main.py \
+  --batch-csv SyntheticData/input_parameters.csv \
+  --sam-backend sam3 \
+  --checkpoint checkpoints/sam3.pt \
+  --sam-text-prompt "small circular light-brown colonies on TSA agar plate interior"
 ```
 
 ### FastAPI server
@@ -102,6 +144,7 @@ Generated outputs are written to:
 
 Typical artifacts:
 - Annotated image (`*_annotated.png`)
+- Raw SAM masks overlay (`*_sam_masks.png`)
 - Per-run JSON result (`*_result.json`)
 - Running CSV summary (`summary.csv`)
 
@@ -114,6 +157,8 @@ Useful environment variables include:
 - `SAM_CHECKPOINT` (default: `checkpoints/sam3.pt`)
 - `SAM_MODEL_CONFIG`
 - `SAM_TEXT_PROMPT`
+- `SAM_TEXT_PROMPTS` (optional prompt ensemble separated by `|`)
+- `SAM_ENABLE_IMAGE_ENHANCEMENT` (`1` to enable CLAHE+sharpen pre-processing)
 - `SAM_AUTO_DOWNLOAD` (`1` to auto-download from URL if configured)
 
 ## Troubleshooting

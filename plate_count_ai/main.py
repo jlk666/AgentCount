@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from dataclasses import replace
 import json
 import logging
@@ -36,11 +37,61 @@ def _collect_batch(batch_dir: Path, metadata_template: dict[str, Any]) -> list[d
     return items
 
 
+def _load_batch_from_csv(csv_path: Path, metadata_template: dict[str, Any]) -> list[dict[str, Any]]:
+    """Load batch items from CSV with columns: image_path + metadata fields."""
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Batch CSV not found: {csv_path}")
+
+    required_cols = {"image_path"}
+    items: list[dict[str, Any]] = []
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            raise ValueError(f"Batch CSV has no header: {csv_path}")
+        missing = required_cols - set(reader.fieldnames)
+        if missing:
+            raise ValueError(f"Batch CSV missing required columns {sorted(missing)}: {csv_path}")
+
+        for idx, row in enumerate(reader, start=2):
+            raw_path = (row.get("image_path") or "").strip()
+            if not raw_path:
+                logger.warning("Skipping row %d with empty image_path", idx)
+                continue
+
+            image_path = Path(raw_path)
+            if not image_path.is_absolute():
+                image_path = (Path.cwd() / image_path).resolve()
+            if not image_path.exists():
+                logger.warning("Skipping row %d; image does not exist: %s", idx, image_path)
+                continue
+
+            md = dict(metadata_template)
+            for key, value in row.items():
+                if key == "image_path" or value is None:
+                    continue
+                text = value.strip()
+                if text == "":
+                    continue
+                if key in {"dilution", "volume"}:
+                    try:
+                        md[key] = float(text)
+                    except ValueError:
+                        logger.warning("Row %d has non-numeric %s=%r; keeping default %r", idx, key, text, md.get(key))
+                else:
+                    md[key] = text
+
+            if not md.get("sample_id"):
+                md["sample_id"] = image_path.stem
+            items.append({"image_path": str(image_path), "metadata": md})
+    return items
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plate Count AI workflow runner")
     parser.add_argument("--image", type=str, help="Path to one plate image")
     parser.add_argument("--metadata", type=str, help="Metadata JSON string")
     parser.add_argument("--batch-dir", type=str, help="Directory with plate images")
+    parser.add_argument("--batch-csv", type=str, help="CSV with image_path and metadata columns")
     parser.add_argument(
         "--sam-backend",
         type=str,
@@ -93,6 +144,16 @@ def main() -> None:
         logger.info("Running batch analysis for %d images", len(batch_items))
         outputs = workflow.run_batch(batch_items)
         logger.info("Batch analysis complete. Results produced: %d", len(outputs))
+        return
+
+    if args.batch_csv:
+        batch_items = _load_batch_from_csv(Path(args.batch_csv), metadata)
+        if not batch_items:
+            logger.warning("No valid rows found in batch CSV: %s", args.batch_csv)
+            return
+        logger.info("Running CSV batch analysis for %d images", len(batch_items))
+        outputs = workflow.run_batch(batch_items)
+        logger.info("CSV batch analysis complete. Results produced: %d", len(outputs))
         return
 
     image_path = args.image
