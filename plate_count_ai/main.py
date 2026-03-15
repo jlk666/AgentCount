@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import csv
 from dataclasses import replace
+from datetime import datetime
 import json
 import logging
 from pathlib import Path
 from typing import Any
 
 from plate_count_ai.config.settings import settings
+from plate_count_ai.utils.batch_report import generate_batch_report
 from plate_count_ai.workflows.plate_workflow import PlateWorkflow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -86,6 +88,27 @@ def _load_batch_from_csv(csv_path: Path, metadata_template: dict[str, Any]) -> l
     return items
 
 
+def _write_batch_summary(outputs: list[dict[str, Any]], output_dir: Path, label: str = "batch") -> Path:
+    """Write a clean summary CSV for a completed batch run."""
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    csv_path = output_dir / f"{label}_summary_{timestamp}.csv"
+    fieldnames = ["sample", "replicate", "dilution", "volume_ml", "colony_count", "cfu_per_ml"]
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for state in outputs:
+            md = state.get("metadata") or {}
+            writer.writerow({
+                "sample": md.get("sample_id", ""),
+                "replicate": md.get("replicate_id", ""),
+                "dilution": md.get("dilution", ""),
+                "volume_ml": md.get("volume", ""),
+                "colony_count": state.get("colony_count", ""),
+                "cfu_per_ml": state.get("cfu_per_ml", ""),
+            })
+    return csv_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plate Count AI workflow runner")
     parser.add_argument("--image", type=str, help="Path to one plate image")
@@ -136,14 +159,24 @@ def main() -> None:
     if args.metadata:
         metadata.update(json.loads(args.metadata))
 
+    logo_path = Path(__file__).resolve().parent.parent / "AgentCountLogo.png"
+
     if args.batch_dir:
         batch_items = _collect_batch(Path(args.batch_dir), metadata)
         if not batch_items:
             logger.warning("No image files found in batch directory: %s", args.batch_dir)
             return
+        label = Path(args.batch_dir).name
         logger.info("Running batch analysis for %d images", len(batch_items))
         outputs = workflow.run_batch(batch_items)
+        run_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        summary_path = _write_batch_summary(outputs, cfg.output_dir, label=label)
+        report_path = cfg.output_dir / f"{label}_report_{run_ts}.html"
+        generate_batch_report(outputs, report_path, logo_path=logo_path,
+                              run_label=label, timestamp=run_ts)
         logger.info("Batch analysis complete. Results produced: %d", len(outputs))
+        logger.info("Batch summary CSV: %s", summary_path)
+        logger.info("Batch HTML report: %s", report_path)
         return
 
     if args.batch_csv:
@@ -151,9 +184,17 @@ def main() -> None:
         if not batch_items:
             logger.warning("No valid rows found in batch CSV: %s", args.batch_csv)
             return
+        label = Path(args.batch_csv).stem
         logger.info("Running CSV batch analysis for %d images", len(batch_items))
         outputs = workflow.run_batch(batch_items)
+        run_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        summary_path = _write_batch_summary(outputs, cfg.output_dir, label=label)
+        report_path = cfg.output_dir / f"{label}_report_{run_ts}.html"
+        generate_batch_report(outputs, report_path, logo_path=logo_path,
+                              run_label=label, timestamp=run_ts)
         logger.info("CSV batch analysis complete. Results produced: %d", len(outputs))
+        logger.info("Batch summary CSV: %s", summary_path)
+        logger.info("Batch HTML report: %s", report_path)
         return
 
     image_path = args.image

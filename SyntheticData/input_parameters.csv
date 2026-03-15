@@ -1,5 +1,10 @@
 image_path,sample_id,dilution,volume,replicate_id
-SyntheticData/Day14-TSA-r1.png,Day14-TSA,0.01,0.1,r1
-SyntheticData/Day14-TSA-r2.png,Day14-TSA,0.01,0.1,r2
-SyntheticData/Day14-TSA-r3.png,Day14-TSA,0.01,0.1,r3
-SyntheticData/Day14-TSA-r4.png,Day14-TSA,0.01,0.1,r4
+SyntheticData/Day14-TSA-r1.png,Day14-TSA,0.0001,0.1,r1
+SyntheticData/Day14-TSA-r2.png,Day14-TSA,0.0001,0.1,r2
+SyntheticData/Day14-TSA-r3.png,Day14-TSA,0.0001,0.1,r3
+SyntheticData/Day7-TSA-r1.png,Day7-TSA,0.01,0.01,r1
+SyntheticData/Day7-TSA-r2.png,Day7-TSA,0.01,0.01,r2
+SyntheticData/Day7-TSA-r3.png,Day7-TSA,0.01,0.01,r3
+SyntheticData/Day1-TSA-r1.png,Day1-TSA,1,0.01,r1
+SyntheticData/Day1-TSA-r2.png,Day1-TSA,1,0.01,r2
+SyntheticData/Day1-TSA-r3.png,Day1-TSA,1,0.01,r3
