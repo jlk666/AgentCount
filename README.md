@@ -115,6 +115,47 @@ python main.py \
   --sam-text-prompt "small circular light-brown colonies on TSA agar plate interior"
 ```
 
+### CLI Parameters (`main.py`)
+
+`main.py` supports the following arguments:
+
+- `--image <path>`: run one image.
+- `--metadata '<json>'`: metadata JSON for single-image mode.
+- `--batch-dir <dir>`: run all images in a folder (same metadata template for all).
+- `--batch-csv <csv>`: run batch from CSV where each row has `image_path` + metadata columns.
+- `--sam-backend <sam1|sam3>`: choose segmentation backend.
+- `--checkpoint <path>`: model checkpoint path for selected backend.
+- `--sam-model-type <vit_b|vit_l|vit_h>`: SAM1 model type (used when `--sam-backend sam1`).
+- `--sam-text-prompt "<text>"`: primary text prompt for SAM3.
+
+Notes:
+- If both `--batch-dir` and `--batch-csv` are provided, `--batch-dir` is used first.
+- In CSV mode, missing metadata fields fall back to defaults from the code:
+  - `sample_id=sample_001`
+  - `dilution=0.01`
+  - `volume=0.1`
+  - `replicate_id=r1`
+
+### Metadata Fields
+
+The framework expects metadata with these keys:
+
+- `sample_id` (string): sample identifier used in output filenames/reporting.
+- `dilution` (float): dilution factor used for CFU/mL calculation.
+- `volume` (float): plated volume (mL) used for CFU/mL calculation.
+- `replicate_id` (string): replicate label (for example `r1`, `r2`).
+
+Example:
+
+```json
+{
+  "sample_id": "Day14-TSA",
+  "dilution": 0.01,
+  "volume": 0.1,
+  "replicate_id": "r1"
+}
+```
+
 ### FastAPI server
 
 Start server:
