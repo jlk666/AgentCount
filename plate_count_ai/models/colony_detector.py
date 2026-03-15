@@ -30,6 +30,8 @@ class ColonyDetector:
         model_type: str = "vit_b",
         model_config: str = "",
         text_prompt: str = "bacterial colonies",
+        text_prompts_raw: str = "",
+        enable_image_enhancement: bool = True,
         checkpoint_url: str = "",
         auto_download_checkpoint: bool = True,
         points_per_side: int = 32,
@@ -47,6 +49,8 @@ class ColonyDetector:
         self.model_type = model_type
         self.model_config = model_config
         self.text_prompt = text_prompt
+        self.text_prompts = self._parse_prompts(text_prompt, text_prompts_raw)
+        self.enable_image_enhancement = enable_image_enhancement
         self.checkpoint_url = checkpoint_url
         self.auto_download_checkpoint = auto_download_checkpoint
         self.points_per_side = points_per_side
@@ -87,6 +91,34 @@ class ColonyDetector:
             self.mask_generator = self._load_sam1(checkpoint_path)
         else:
             self.mask_generator = self._load_sam3(checkpoint_path)
+
+    @staticmethod
+    def _parse_prompts(primary_prompt: str, prompts_raw: str) -> list[str]:
+        prompts: list[str] = []
+        seen: set[str] = set()
+
+        def _add(p: str) -> None:
+            candidate = p.strip()
+            if not candidate or candidate in seen:
+                return
+            seen.add(candidate)
+            prompts.append(candidate)
+
+        _add(primary_prompt)
+        for token in prompts_raw.split("|"):
+            _add(token)
+        return prompts
+
+    @staticmethod
+    def _enhance_for_sam(image_rgb: np.ndarray) -> np.ndarray:
+        """Improve local contrast for low-contrast colony imagery."""
+        lab = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2LAB)
+        l_chan, a_chan, b_chan = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l_enhanced = clahe.apply(l_chan)
+        enhanced = cv2.cvtColor(cv2.merge((l_enhanced, a_chan, b_chan)), cv2.COLOR_LAB2RGB)
+        blur = cv2.GaussianBlur(enhanced, (0, 0), 1.0)
+        return cv2.addWeighted(enhanced, 1.25, blur, -0.25, 0.0)
 
     # ------------------------------------------------------------------
     # Model loading
@@ -150,6 +182,8 @@ class ColonyDetector:
             device=self.device,
             load_from_HF=False,
         )
+        model = model.to(device=self.device)
+        model.eval()
 
         # Sam3Processor(model, device=...) — device must match model
         processor = Sam3Processor(model, device=self.device)
@@ -183,10 +217,8 @@ class ColonyDetector:
                 kept.append(det)
         return kept
 
-    def detect(self, image: np.ndarray) -> list[dict[str, Any]]:
-        """Run SAM segmentation and return normalized detection-style outputs."""
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        masks = self.mask_generator.generate(image_rgb)
+    def _masks_to_detections(self, masks: list[dict[str, Any]], image: np.ndarray) -> list[dict[str, Any]]:
+        """Convert raw SAM masks to filtered detection objects."""
         detections: list[dict[str, Any]] = []
         if not masks:
             return detections
@@ -238,6 +270,22 @@ class ColonyDetector:
             )
         return self._nms(detections)
 
+    def detect_with_intermediate(self, image: np.ndarray) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Run SAM segmentation and return both detections and raw SAM masks."""
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        sam_input = self._enhance_for_sam(image_rgb) if self.enable_image_enhancement else image_rgb
+        if hasattr(self.mask_generator, "generate_multi"):
+            raw_masks = self.mask_generator.generate_multi(sam_input, self.text_prompts)
+        else:
+            raw_masks = self.mask_generator.generate(sam_input)
+        detections = self._masks_to_detections(raw_masks, image)
+        return detections, raw_masks
+
+    def detect(self, image: np.ndarray) -> list[dict[str, Any]]:
+        """Run SAM segmentation and return normalized detection-style outputs."""
+        detections, _ = self.detect_with_intermediate(image)
+        return detections
+
 
 class _Sam3MaskGeneratorAdapter:
     """Adapts Sam3Processor text-prompt output to the AMG-style list used downstream.
@@ -252,13 +300,13 @@ class _Sam3MaskGeneratorAdapter:
         self.processor = processor
         self.prompt = prompt
 
-    def generate(self, image_rgb: np.ndarray) -> list[dict[str, Any]]:
-        pil_img = Image.fromarray(image_rgb)
+    @staticmethod
+    def _to_numpy(t: Any) -> np.ndarray:
+        if hasattr(t, "detach"):
+            return t.detach().cpu().numpy()
+        return np.asarray(t)
 
-        # set_image returns state dict; set_text_prompt mutates and returns same dict
-        state = self.processor.set_image(pil_img)
-        state = self.processor.set_text_prompt(prompt=self.prompt, state=state)
-
+    def _state_to_anns(self, state: dict[str, Any], prompt: str) -> list[dict[str, Any]]:
         masks_t = state.get("masks")    # BoolTensor [N, 1, H, W]
         boxes_t = state.get("boxes")    # FloatTensor [N, 4] xyxy absolute
         scores_t = state.get("scores")  # FloatTensor [N]
@@ -266,14 +314,9 @@ class _Sam3MaskGeneratorAdapter:
         if masks_t is None or boxes_t is None or len(boxes_t) == 0:
             return []
 
-        def _to_numpy(t: Any) -> np.ndarray:
-            if hasattr(t, "detach"):
-                return t.detach().cpu().numpy()
-            return np.asarray(t)
-
-        masks_np = _to_numpy(masks_t)   # [N, 1, H, W] bool
-        boxes_np = _to_numpy(boxes_t)   # [N, 4]
-        scores_np = _to_numpy(scores_t) if scores_t is not None else np.ones(len(boxes_np))
+        masks_np = self._to_numpy(masks_t)   # [N, 1, H, W] bool
+        boxes_np = self._to_numpy(boxes_t)   # [N, 4]
+        scores_np = self._to_numpy(scores_t) if scores_t is not None else np.ones(len(boxes_np))
 
         anns: list[dict[str, Any]] = []
         for i in range(len(boxes_np)):
@@ -295,6 +338,27 @@ class _Sam3MaskGeneratorAdapter:
                     "bbox": bbox,
                     "predicted_iou": score,
                     "stability_score": score,
+                    "prompt": prompt,
                 }
             )
         return anns
+
+    def generate(self, image_rgb: np.ndarray) -> list[dict[str, Any]]:
+        pil_img = Image.fromarray(image_rgb)
+
+        # set_image returns state dict; set_text_prompt mutates and returns same dict
+        state = self.processor.set_image(pil_img)
+        state = self.processor.set_text_prompt(prompt=self.prompt, state=state)
+        return self._state_to_anns(state=state, prompt=self.prompt)
+
+    def generate_multi(self, image_rgb: np.ndarray, prompts: list[str]) -> list[dict[str, Any]]:
+        pil_img = Image.fromarray(image_rgb)
+        if not prompts:
+            prompts = [self.prompt]
+
+        all_anns: list[dict[str, Any]] = []
+        for prompt in prompts:
+            state = self.processor.set_image(pil_img)
+            state = self.processor.set_text_prompt(prompt=prompt, state=state)
+            all_anns.extend(self._state_to_anns(state=state, prompt=prompt))
+        return all_anns

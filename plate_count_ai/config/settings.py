@@ -25,6 +25,8 @@ class Settings:
     sam_model_type: str = "vit_b"
     sam_model_config: str = os.getenv("SAM_MODEL_CONFIG", "configs/sam3/sam3_hiera_b+.yaml")
     sam_text_prompt: str = os.getenv("SAM_TEXT_PROMPT", "bacterial colonies")
+    sam_text_prompts: str = os.getenv("SAM_TEXT_PROMPTS", "")
+    sam_enable_image_enhancement: bool = os.getenv("SAM_ENABLE_IMAGE_ENHANCEMENT", "1") == "1"
     sam_checkpoint_url: str = os.getenv(
         "SAM_CHECKPOINT_URL",
         "",

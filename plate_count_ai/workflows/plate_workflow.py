@@ -22,6 +22,7 @@ class PlateWorkflowState(TypedDict, total=False):
     metadata: dict[str, Any]
     processed_image: Any
     plate_image: Any
+    raw_sam_masks: list[dict[str, Any]]
     detections: list[dict[str, Any]]
     colony_count: int
     cfu_per_ml: float | None
@@ -30,6 +31,7 @@ class PlateWorkflowState(TypedDict, total=False):
     warnings: list[str]
     result: dict[str, Any]
     annotated_image_path: str
+    sam_masks_image_path: str
     result_json_path: str
     summary_csv_path: str
 
@@ -46,6 +48,8 @@ class PlateWorkflow:
             model_type=self.settings.sam_model_type,
             model_config=self.settings.sam_model_config,
             text_prompt=self.settings.sam_text_prompt,
+            text_prompts_raw=self.settings.sam_text_prompts,
+            enable_image_enhancement=self.settings.sam_enable_image_enhancement,
             checkpoint_url=self.settings.sam_checkpoint_url,
             auto_download_checkpoint=self.settings.auto_download_sam_checkpoint,
             points_per_side=self.settings.sam_points_per_side,

@@ -18,8 +18,9 @@ class ColonyDetectionAgent:
         if plate_image is None:
             raise ValueError("ColonyDetectionAgent requires 'plate_image' in state.")
 
-        detections = self.detector.detect(plate_image)
+        detections, raw_sam_masks = self.detector.detect_with_intermediate(plate_image)
         return {
             **state,
             "detections": detections,
+            "raw_sam_masks": raw_sam_masks,
         }

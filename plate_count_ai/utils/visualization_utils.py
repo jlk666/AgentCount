@@ -64,6 +64,48 @@ def draw_annotations(
     return canvas
 
 
+def draw_sam_masks_overlay(
+    image: np.ndarray,
+    raw_masks: list[dict[str, Any]],
+    max_masks: int = 512,
+) -> np.ndarray:
+    """Overlay raw SAM masks right after inference."""
+    canvas = image.copy()
+    overlay = np.zeros_like(canvas, dtype=np.uint8)
+
+    for idx, ann in enumerate(raw_masks[:max_masks]):
+        mask = ann.get("segmentation")
+        if mask is None:
+            continue
+        mask_bool = mask.astype(bool)
+        color = np.array(
+            [
+                (53 * (idx + 1)) % 255,
+                (97 * (idx + 1)) % 255,
+                (193 * (idx + 1)) % 255,
+            ],
+            dtype=np.uint8,
+        )
+        overlay[mask_bool] = color
+
+        x, y, bw, bh = ann.get("bbox", [0, 0, 0, 0])
+        x1, y1, x2, y2 = int(x), int(y), int(x + bw), int(y + bh)
+        cv2.rectangle(canvas, (x1, y1), (x2, y2), tuple(int(c) for c in color), 1)
+
+    canvas = cv2.addWeighted(canvas, 0.65, overlay, 0.35, 0.0)
+    cv2.putText(
+        canvas,
+        f"SAM raw masks: {len(raw_masks)}",
+        (10, 24),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    return canvas
+
+
 def save_image(image: np.ndarray, output_path: str | Path) -> str:
     """Persist an image and return normalized path string."""
     output_path = Path(output_path)

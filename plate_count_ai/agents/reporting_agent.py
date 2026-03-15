@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from plate_count_ai.config.settings import Settings
-from plate_count_ai.utils.visualization_utils import draw_annotations, save_image
+from plate_count_ai.utils.visualization_utils import draw_annotations, draw_sam_masks_overlay, save_image
 
 
 class ReportingAgent:
@@ -41,6 +41,11 @@ class ReportingAgent:
         )
 
         annotated_path = save_image(annotated, self.settings.output_dir / f"{base_name}_annotated.png")
+        raw_sam_masks = state.get("raw_sam_masks", [])
+        sam_masks_path = ""
+        if raw_sam_masks:
+            sam_overlay = draw_sam_masks_overlay(image=plate_image, raw_masks=raw_sam_masks)
+            sam_masks_path = save_image(sam_overlay, self.settings.output_dir / f"{base_name}_sam_masks.png")
         result_payload = {
             "image_path": state.get("image_path"),
             "metadata": metadata,
@@ -50,6 +55,7 @@ class ReportingAgent:
             "validation_status": state.get("validation_status"),
             "warnings": state.get("warnings", []),
             "annotated_image_path": annotated_path,
+            "sam_masks_image_path": sam_masks_path or None,
         }
 
         json_path = self.settings.output_dir / f"{base_name}_result.json"
@@ -100,5 +106,6 @@ class ReportingAgent:
             "result_json_path": str(json_path),
             "summary_csv_path": str(csv_path),
             "annotated_image_path": annotated_path,
+            "sam_masks_image_path": sam_masks_path,
             "result": result_payload,
         }
