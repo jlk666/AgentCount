@@ -13,6 +13,10 @@ Rapid and reproducible colony enumeration remains a bottleneck in microbiology w
 
 To improve detection robustness across visually heterogeneous plates, we implemented prompt ensembling and image enhancement (contrast-limited adaptive histogram equalization plus mild sharpening) prior to SAM3 inference. In internal evaluations, prompt and preprocessing choices substantially influenced recall, while postprocessing reduced duplicate and spurious detections. The workflow produced machine-readable JSON and CSV outputs and enabled reproducible processing of synthetic and challenging test sets with configurable metadata (sample ID, dilution, plated volume, replicate ID). These results demonstrate that an agentic, modular vision pipeline can support scalable colony quantification and standardized CFU reporting in microbiology imaging workflows.
 
+<p align="center">
+  <img src="workFlow.jpg" alt="AgentCount Workflow" width="900"/>
+</p>
+
 ## Quick Setup
 
 ### 1) Clone and enter the project

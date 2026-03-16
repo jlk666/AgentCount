@@ -56,6 +56,12 @@ class Settings:
     merge_iou_threshold: float = 0.15
     overgrown_count_threshold: int = 500
 
+    # Local LLM (Ollama) for batch insight extraction
+    llm_enabled: bool = os.getenv("LLM_ENABLED", "1") == "1"
+    llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:7b")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "120"))
+
     # Optional persistence schema flags
     postgres_enabled: bool = False
     postgres_dsn: str = "postgresql://postgres:postgres@localhost:5432/plate_count_ai"

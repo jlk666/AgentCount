@@ -63,6 +63,11 @@ tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
 .thumb-card img { width: 100%; display: block; }
 .thumb-card .label { padding: 8px 12px; font-size: 12px; color: var(--muted); }
 .thumb-card .label strong { display: block; font-size: 13px; color: var(--text); }
+.insight-box { line-height: 1.75; font-size: 13.5px; white-space: pre-wrap; }
+.insight-box p { margin-bottom: 12px; }
+.llm-badge { display: inline-block; background: var(--accent); color: #fff;
+             font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+             margin-left: 8px; vertical-align: middle; }
 footer { text-align: center; padding: 24px; font-size: 12px; color: var(--muted); }
 @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
 """
@@ -247,6 +252,18 @@ def _thumbnail_section(outputs: list[dict[str, Any]]) -> str:
     return '<div class="thumb-grid">' + "\n".join(cards) + "</div>"
 
 
+def _insights_section(insights: str, llm_model: str) -> str:
+    if not insights:
+        return ""
+    badge = f'<span class="llm-badge">{llm_model}</span>' if llm_model else ""
+    # Convert plain paragraphs to <p> tags for nicer rendering
+    paragraphs = [f"<p>{p.strip()}</p>" for p in insights.split("\n\n") if p.strip()]
+    body = "\n".join(paragraphs) if paragraphs else f"<p>{insights}</p>"
+    return f"""
+  <h2>AI-Generated Scientific Insights {badge}</h2>
+  <div class="card insight-box">{body}</div>"""
+
+
 # ── public API ────────────────────────────────────────────────────────────────
 
 def generate_batch_report(
@@ -255,6 +272,8 @@ def generate_batch_report(
     logo_path: Path | None = None,
     run_label: str = "Batch Run",
     timestamp: str = "",
+    insights: str = "",
+    llm_model: str = "",
 ) -> Path:
     """
     Build a self-contained HTML report from a completed batch run.
@@ -266,6 +285,8 @@ def generate_batch_report(
     logo_path   : optional path to logo PNG (embedded as base64)
     run_label   : title string shown in the header
     timestamp   : ISO timestamp string for the header subtitle
+    insights    : optional LLM-generated narrative text
+    llm_model   : model name shown in the badge (e.g. "qwen2.5:7b")
     """
     # ── organise data by sample ──────────────────────────────────────────────
     count_groups: dict[str, list[float]] = {}
@@ -347,6 +368,8 @@ def generate_batch_report(
     </p>
     {_ttest_table_html(cfu_ttests)}
   </div>
+
+  {_insights_section(insights, llm_model)}
 
   <h2>Output Images</h2>
   {_thumbnail_section(outputs)}

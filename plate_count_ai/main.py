@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from plate_count_ai.agents.insight_agent import InsightAgent
 from plate_count_ai.config.settings import settings
 from plate_count_ai.utils.batch_report import generate_batch_report
 from plate_count_ai.workflows.plate_workflow import PlateWorkflow
@@ -88,6 +89,60 @@ def _load_batch_from_csv(csv_path: Path, metadata_template: dict[str, Any]) -> l
     return items
 
 
+def _build_insight_inputs(
+    outputs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Prepare summary rows and t-test results for the InsightAgent."""
+    import itertools
+    import numpy as np
+    from scipy import stats
+    import warnings
+
+    summary_rows = []
+    count_groups: dict[str, list[float]] = {}
+    cfu_groups:   dict[str, list[float]] = {}
+
+    for state in outputs:
+        md = state.get("metadata") or {}
+        key = md.get("sample_id", "unknown")
+        cnt = state.get("colony_count")
+        cfu = state.get("cfu_per_ml")
+        summary_rows.append({
+            "sample":        key,
+            "replicate":     md.get("replicate_id", ""),
+            "dilution":      md.get("dilution", ""),
+            "volume_ml":     md.get("volume", ""),
+            "colony_count":  cnt,
+            "cfu_per_ml":    cfu,
+        })
+        if cnt is not None:
+            count_groups.setdefault(key, []).append(float(cnt))
+        if cfu is not None:
+            cfu_groups.setdefault(key, []).append(float(cfu))
+
+    def _ttests(groups: dict[str, list[float]]) -> list[dict[str, Any]]:
+        results = []
+        for a, b in itertools.combinations(groups.keys(), 2):
+            va, vb = groups[a], groups[b]
+            if len(va) < 2 or len(vb) < 2:
+                t_stat, p_val = float("nan"), float("nan")
+            else:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    t_stat, p_val = stats.ttest_ind(va, vb, equal_var=False)
+            results.append({
+                "group_a": a, "group_b": b,
+                "mean_a": float(np.mean(va)), "mean_b": float(np.mean(vb)),
+                "n_a": len(va), "n_b": len(vb),
+                "t_stat": round(float(t_stat), 4) if not np.isnan(t_stat) else None,
+                "p_value": round(float(p_val), 6) if not np.isnan(p_val) else None,
+                "significant": bool(p_val < 0.05) if not np.isnan(p_val) else None,
+            })
+        return results
+
+    return summary_rows, _ttests(count_groups), _ttests(cfu_groups)
+
+
 def _write_batch_summary(outputs: list[dict[str, Any]], output_dir: Path, label: str = "batch") -> Path:
     """Write a clean summary CSV for a completed batch run."""
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
@@ -160,6 +215,7 @@ def main() -> None:
         metadata.update(json.loads(args.metadata))
 
     logo_path = Path(__file__).resolve().parent.parent / "AgentCountLogo.png"
+    insight_agent = InsightAgent(cfg)
 
     if args.batch_dir:
         batch_items = _collect_batch(Path(args.batch_dir), metadata)
@@ -171,9 +227,12 @@ def main() -> None:
         outputs = workflow.run_batch(batch_items)
         run_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         summary_path = _write_batch_summary(outputs, cfg.output_dir, label=label)
+        summary_rows, count_ttests, cfu_ttests = _build_insight_inputs(outputs)
+        insights = insight_agent.generate(summary_rows, count_ttests, cfu_ttests)
         report_path = cfg.output_dir / f"{label}_report_{run_ts}.html"
         generate_batch_report(outputs, report_path, logo_path=logo_path,
-                              run_label=label, timestamp=run_ts)
+                              run_label=label, timestamp=run_ts,
+                              insights=insights, llm_model=cfg.llm_model)
         logger.info("Batch analysis complete. Results produced: %d", len(outputs))
         logger.info("Batch summary CSV: %s", summary_path)
         logger.info("Batch HTML report: %s", report_path)
@@ -189,9 +248,12 @@ def main() -> None:
         outputs = workflow.run_batch(batch_items)
         run_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         summary_path = _write_batch_summary(outputs, cfg.output_dir, label=label)
+        summary_rows, count_ttests, cfu_ttests = _build_insight_inputs(outputs)
+        insights = insight_agent.generate(summary_rows, count_ttests, cfu_ttests)
         report_path = cfg.output_dir / f"{label}_report_{run_ts}.html"
         generate_batch_report(outputs, report_path, logo_path=logo_path,
-                              run_label=label, timestamp=run_ts)
+                              run_label=label, timestamp=run_ts,
+                              insights=insights, llm_model=cfg.llm_model)
         logger.info("CSV batch analysis complete. Results produced: %d", len(outputs))
         logger.info("Batch summary CSV: %s", summary_path)
         logger.info("Batch HTML report: %s", report_path)
