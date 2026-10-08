@@ -10,6 +10,7 @@ from urllib.request import urlretrieve
 import cv2
 import numpy as np
 from PIL import Image
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +304,8 @@ class _Sam3MaskGeneratorAdapter:
     @staticmethod
     def _to_numpy(t: Any) -> np.ndarray:
         if hasattr(t, "detach"):
+            if t.dtype == torch.bfloat16:
+                t = t.float()
             return t.detach().cpu().numpy()
         return np.asarray(t)
 
@@ -347,8 +350,9 @@ class _Sam3MaskGeneratorAdapter:
         pil_img = Image.fromarray(image_rgb)
 
         # set_image returns state dict; set_text_prompt mutates and returns same dict
-        state = self.processor.set_image(pil_img)
-        state = self.processor.set_text_prompt(prompt=self.prompt, state=state)
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.processor.device.startswith("cuda")):
+            state = self.processor.set_image(pil_img)
+            state = self.processor.set_text_prompt(prompt=self.prompt, state=state)
         return self._state_to_anns(state=state, prompt=self.prompt)
 
     def generate_multi(self, image_rgb: np.ndarray, prompts: list[str]) -> list[dict[str, Any]]:
@@ -358,7 +362,8 @@ class _Sam3MaskGeneratorAdapter:
 
         all_anns: list[dict[str, Any]] = []
         for prompt in prompts:
-            state = self.processor.set_image(pil_img)
-            state = self.processor.set_text_prompt(prompt=prompt, state=state)
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.processor.device.startswith("cuda")):
+                state = self.processor.set_image(pil_img)
+                state = self.processor.set_text_prompt(prompt=prompt, state=state)
             all_anns.extend(self._state_to_anns(state=state, prompt=prompt))
         return all_anns

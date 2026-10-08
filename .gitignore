@@ -23,6 +23,7 @@ checkpoints/
 # Generated outputs and local test assets
 plate_count_ai/outputs/
 testPngs/
+RealData/
 
 # Common large archives/artifacts
 *.zip

@@ -13,5 +13,9 @@ torch
 torchvision
 einops
 segment-anything
+setuptools<81
+pycocotools
+psutil
+huggingface-hub
 git+https://github.com/facebookresearch/sam3.git
 psycopg2-binary
