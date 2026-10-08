@@ -23,8 +23,13 @@ class PlateWorkflowState(TypedDict, total=False):
     processed_image: Any
     plate_image: Any
     raw_sam_masks: list[dict[str, Any]]
+    raw_sam_overlay: Any
+    raw_sam_mask_count: int
+    tile_diagnostics: list[dict[str, Any]]
     detections: list[dict[str, Any]]
     colony_count: int
+    count_status: str
+    tntc_texture_fraction: float
     cfu_per_ml: float | None
     qc_status: dict[str, Any]
     validation_status: dict[str, Any]
@@ -60,6 +65,9 @@ class PlateWorkflow:
             max_colony_area_ratio=self.settings.max_colony_area_ratio,
             min_colony_circularity=self.settings.min_colony_circularity,
             nms_iou_threshold=self.settings.nms_iou_threshold,
+            enable_tiling=self.settings.sam_use_tiling,
+            tile_size=self.settings.sam_tile_size,
+            tile_overlap=self.settings.sam_tile_overlap,
         )
 
         self.qc_agent = ImageQCAgent(self.settings)

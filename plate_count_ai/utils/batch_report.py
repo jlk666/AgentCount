@@ -14,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
+from PIL import Image
 from scipy import stats
 
 
@@ -87,6 +88,16 @@ def _file_to_b64(path: str | Path) -> str:
     return base64.b64encode(Path(path).read_bytes()).decode()
 
 
+def _thumbnail_to_b64(path: str | Path, max_size: int = 600) -> str:
+    """Embed a compact preview instead of a multi-megapixel analysis image."""
+    with Image.open(path) as source:
+        preview = source.convert("RGB")
+        preview.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        preview.save(buf, format="JPEG", quality=78, optimize=True)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def _fmt_pval(p: float) -> str:
     if p < 0.001:
         return "< 0.001"
@@ -115,6 +126,11 @@ def _bar_plot(
     title: str,
     log_scale: bool = False,
 ) -> str:
+    if not groups:
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.text(0.5, 0.5, "No countable plates", ha="center", va="center", transform=ax.transAxes)
+        ax.axis("off")
+        return _fig_to_b64(fig)
     samples = list(groups.keys())
     means = [float(np.mean(v)) for v in groups.values()]
     sds   = [float(np.std(v, ddof=1)) if len(v) > 1 else 0.0 for v in groups.values()]
@@ -204,7 +220,7 @@ def _ttest_table_html(rows: list[dict[str, Any]]) -> str:
 
 def _summary_table_html(outputs: list[dict[str, Any]]) -> str:
     header = ("Sample", "Replicate", "Dilution", "Volume (mL)",
-              "Colony Count", "CFU/mL", "QC Passed", "Validation Passed")
+              "Colony Count", "Count Status", "CFU/mL", "QC Passed", "Validation Passed")
     html = ['<table><thead><tr>']
     for h in header:
         html.append(f'<th>{h}</th>')
@@ -222,6 +238,7 @@ def _summary_table_html(outputs: list[dict[str, Any]]) -> str:
             f'<td>{md.get("dilution","")}</td>'
             f'<td>{md.get("volume","")}</td>'
             f'<td>{state.get("colony_count","")}</td>'
+            f'<td>{state.get("count_status","")}</td>'
             f'<td>{cfu_str}</td>'
             f'<td>{"✓" if qc is True else ("✗" if qc is False else "—")}</td>'
             f'<td>{"✓" if val is True else ("✗" if val is False else "—")}</td>'
@@ -242,10 +259,10 @@ def _thumbnail_section(outputs: list[dict[str, Any]]) -> str:
         ]:
             path = state.get(key)
             if path and Path(path).exists():
-                b64 = _file_to_b64(path)
+                b64 = _thumbnail_to_b64(path)
                 cards.append(
                     f'<div class="thumb-card">'
-                    f'<img src="data:image/png;base64,{b64}" loading="lazy"/>'
+                    f'<img src="data:image/jpeg;base64,{b64}" loading="lazy"/>'
                     f'<div class="label"><strong>{label}</strong>{title}</div>'
                     f'</div>'
                 )
@@ -274,6 +291,7 @@ def generate_batch_report(
     timestamp: str = "",
     insights: str = "",
     llm_model: str = "",
+    include_pairwise_tests: bool = False,
 ) -> Path:
     """
     Build a self-contained HTML report from a completed batch run.
@@ -296,9 +314,9 @@ def generate_batch_report(
         key = md.get("sample_id", "unknown")
         cnt = state.get("colony_count")
         cfu = state.get("cfu_per_ml")
-        if cnt is not None:
+        if cnt is not None and state.get("count_status") == "countable_candidate":
             count_groups.setdefault(key, []).append(float(cnt))
-        if cfu is not None:
+        if cfu is not None and state.get("count_status") == "countable_candidate":
             cfu_groups.setdefault(key, []).append(float(cfu))
 
     # ── plots ────────────────────────────────────────────────────────────────
@@ -307,8 +325,8 @@ def generate_batch_report(
                           log_scale=True)
 
     # ── statistics ───────────────────────────────────────────────────────────
-    count_ttests = _pairwise_ttests(count_groups)
-    cfu_ttests   = _pairwise_ttests(cfu_groups)
+    count_ttests = _pairwise_ttests(count_groups) if include_pairwise_tests else []
+    cfu_ttests   = _pairwise_ttests(cfu_groups) if include_pairwise_tests else []
 
     # ── logo ─────────────────────────────────────────────────────────────────
     logo_tag = ""
@@ -351,23 +369,23 @@ def generate_batch_report(
     </div>
   </div>
 
-  <h2>Pairwise t-Tests — Colony Count</h2>
+  {f'''<h2>Pairwise t-Tests — Colony Count</h2>
   <div class="card">
     <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
       Welch's two-sample t-test (unequal variance assumed).
       *** p &lt; 0.001 &nbsp; ** p &lt; 0.01 &nbsp; * p &lt; 0.05 &nbsp; ns = not significant.
     </p>
     {_ttest_table_html(count_ttests)}
-  </div>
+  </div>''' if include_pairwise_tests else ''}
 
-  <h2>Pairwise t-Tests — CFU/mL</h2>
+  {f'''<h2>Pairwise t-Tests — CFU/mL</h2>
   <div class="card">
     <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
       Welch's two-sample t-test (unequal variance assumed).
       *** p &lt; 0.001 &nbsp; ** p &lt; 0.01 &nbsp; * p &lt; 0.05 &nbsp; ns = not significant.
     </p>
     {_ttest_table_html(cfu_ttests)}
-  </div>
+  </div>''' if include_pairwise_tests else ''}
 
   {_insights_section(insights, llm_model)}
 

@@ -17,6 +17,7 @@ def draw_annotations(
     qc_status: dict[str, Any] | None,
     validation_status: dict[str, Any] | None,
     warnings: list[str] | None,
+    count_status: str | None = None,
 ) -> np.ndarray:
     """Overlay detections and status text onto an image."""
     canvas = image.copy()
@@ -41,6 +42,8 @@ def draw_annotations(
         f"Colonies: {colony_count if colony_count is not None else 'N/A'}",
         f"CFU/mL: {cfu_per_ml:.2f}" if isinstance(cfu_per_ml, (int, float)) else "CFU/mL: N/A",
     ]
+    if count_status:
+        lines.append(f"Count status: {count_status}")
     if qc_status is not None:
         lines.append(f"QC pass: {qc_status.get('passed', False)}")
     if validation_status is not None:

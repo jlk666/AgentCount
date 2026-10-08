@@ -43,6 +43,9 @@ class ColonyDetector:
         max_colony_area_ratio: float = 0.015,
         min_colony_circularity: float = 0.2,
         nms_iou_threshold: float = 0.3,
+        enable_tiling: bool = True,
+        tile_size: int = 1008,
+        tile_overlap: int = 252,
     ) -> None:
         self.model_path = model_path
         self.device = device
@@ -62,6 +65,11 @@ class ColonyDetector:
         self.max_colony_area_ratio = max_colony_area_ratio
         self.min_colony_circularity = min_colony_circularity
         self.nms_iou_threshold = nms_iou_threshold
+        self.enable_tiling = enable_tiling and self.backbone == "sam3"
+        if tile_size <= 0 or tile_overlap < 0 or tile_overlap >= tile_size:
+            raise ValueError("Tile size must be positive and overlap must be between 0 and tile size")
+        self.tile_size = tile_size
+        self.tile_overlap = tile_overlap
 
         checkpoint_path = Path(self.model_path)
         if not checkpoint_path.is_absolute():
@@ -281,6 +289,70 @@ class ColonyDetector:
             raw_masks = self.mask_generator.generate(sam_input)
         detections = self._masks_to_detections(raw_masks, image)
         return detections, raw_masks
+
+    def _tile_starts(self, length: int) -> list[int]:
+        if length <= self.tile_size:
+            return [0]
+        starts = list(range(0, length - self.tile_size + 1, self.tile_size - self.tile_overlap))
+        last = length - self.tile_size
+        if starts[-1] != last:
+            starts.append(last)
+        return starts
+
+    @staticmethod
+    def _ownership_bounds(starts: list[int], index: int, tile_length: int, full_length: int) -> tuple[float, float]:
+        left = 0.0 if index == 0 else (starts[index - 1] + tile_length + starts[index]) / 2
+        right = float(full_length) if index == len(starts) - 1 else (starts[index] + tile_length + starts[index + 1]) / 2
+        return left, right
+
+    def detect_tiled_with_intermediate(
+        self, image: np.ndarray
+    ) -> tuple[list[dict[str, Any]], int, list[dict[str, int]], np.ndarray]:
+        """Detect in overlapping tiles without retaining full-size masks in memory."""
+        height, width = image.shape[:2]
+        xs, ys = self._tile_starts(width), self._tile_starts(height)
+        kept: list[dict[str, Any]] = []
+        diagnostics: list[dict[str, int]] = []
+        raw_overlay = image.copy()
+        raw_count = 0
+
+        for yi, y in enumerate(ys):
+            for xi, x in enumerate(xs):
+                tile = image[y:min(y + self.tile_size, height), x:min(x + self.tile_size, width)]
+                local, raw_masks = self.detect_with_intermediate(tile)
+                raw_count += len(raw_masks)
+
+                roi = raw_overlay[y:y + tile.shape[0], x:x + tile.shape[1]]
+                for mask_index, ann in enumerate(raw_masks, start=raw_count - len(raw_masks) + 1):
+                    mask = ann.get("segmentation")
+                    if mask is None:
+                        continue
+                    mask_bool = mask.astype(bool)
+                    color = np.array([(53 * mask_index) % 255, (97 * mask_index) % 255, (193 * mask_index) % 255], dtype=np.uint8)
+                    roi[mask_bool] = (roi[mask_bool] * 0.65 + color * 0.35).astype(np.uint8)
+
+                xlo, xhi = self._ownership_bounds(xs, xi, tile.shape[1], width)
+                ylo, yhi = self._ownership_bounds(ys, yi, tile.shape[0], height)
+                owned = 0
+                for det in local:
+                    x1, y1, x2, y2 = det["bbox"]
+                    center_x = x + (x1 + x2) / 2
+                    center_y = y + (y1 + y2) / 2
+                    if xlo <= center_x < xhi and ylo <= center_y < yhi:
+                        shifted = dict(det)
+                        shifted["bbox"] = [x1 + x, y1 + y, x2 + x, y2 + y]
+                        kept.append(shifted)
+                        owned += 1
+                diagnostics.append({
+                    "x": x, "y": y, "width": tile.shape[1], "height": tile.shape[0],
+                    "raw_masks": len(raw_masks), "accepted_local": len(local),
+                    "accepted_owned": owned,
+                })
+                del raw_masks
+
+        cv2.putText(raw_overlay, f"SAM raw tile masks: {raw_count}", (10, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+        return self._nms(kept), raw_count, diagnostics, raw_overlay
 
     def detect(self, image: np.ndarray) -> list[dict[str, Any]]:
         """Run SAM segmentation and return normalized detection-style outputs."""

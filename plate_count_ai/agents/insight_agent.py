@@ -40,6 +40,9 @@ Write a Results-section narrative (3–4 concise paragraphs) that:
 3. Comments on within-group reproducibility (CV%, replicate consistency).
 4. Concludes with a brief biological interpretation of the findings.
 
+Rows marked TNTC or negative_control are quality/control observations, not numeric
+CFU/mL results. Do not infer a time trend unless sampling times are provided.
+
 Use past tense and passive voice where appropriate. Quote exact CFU/mL and p-values.
 """
 
@@ -87,6 +90,8 @@ class InsightAgent:
         Returns the insight text, or an empty string with a logged warning if
         the Ollama service or model is unavailable.
         """
+        if not any(row.get("count_status") == "countable_candidate" for row in summary_rows):
+            return "No plates qualified as countable candidates; numeric CFU/mL comparisons are not supported."
         if not self.settings.llm_enabled:
             logger.info("LLM insight generation disabled (LLM_ENABLED=0).")
             return ""

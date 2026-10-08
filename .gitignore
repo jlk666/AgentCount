@@ -24,6 +24,18 @@ checkpoints/
 plate_count_ai/outputs/
 testPngs/
 RealData/
+evaluation/tiled_dev/
+evaluation/tiled_dev_*/
+
+# Generated real-data evaluation tables, reports, and images
+evaluation/*.csv
+evaluation/*.json
+evaluation/*.html
+evaluation/*.png
+evaluation/*.jpg
+evaluation/*.jpeg
+evaluation/*.webp
+evaluation/*.svg
 
 # Common large archives/artifacts
 *.zip

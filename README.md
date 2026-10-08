@@ -117,6 +117,19 @@ Run:
 python main.py --batch-csv SyntheticData/input_parameters.csv
 ```
 
+For the 48-hour real-data development split, use the reviewed manifest metadata:
+
+```bash
+python main.py \
+  --batch-csv evaluation/development_input_parameters.csv \
+  --output-dir plate_count_ai/outputs/real_48h_tiled_v1 \
+  --sam-backend sam3
+```
+
+SAM3 uses overlapping 1008-pixel tiles with 252-pixel overlap by default. Disable with `--no-tiling`, or adjust using `--tile-size` and `--tile-overlap`. Each result includes raw tile-mask counts, tile diagnostics, and a mask overlay. The raw detection count is preserved even when the plate is classified `TNTC`.
+
+The count status is `countable_candidate`, `below_counting_range`, `TNTC`, or `negative_control`. A low detected count plus strong image texture is marked `TNTC` for human review; TNTC and negative controls have no numeric CFU/mL result. This texture rule is a screening heuristic tuned on the development split, so its labels require review before scientific use. Batch reports omit pairwise tests by default; use `--pairwise-tests` only when the experiment supports those comparisons.
+
 Optional SAM3 prompt ensemble (pipe-separated):
 
 ```bash
@@ -137,6 +150,9 @@ python main.py \
 - `--metadata '<json>'`: metadata JSON for single-image mode.
 - `--batch-dir <dir>`: run all images in a folder (same metadata template for all).
 - `--batch-csv <csv>`: run batch from CSV where each row has `image_path` + metadata columns.
+- `--output-dir <dir>`: write artifacts to a separate directory.
+- `--no-tiling`, `--tile-size <pixels>`, `--tile-overlap <pixels>`: control SAM3 tiling.
+- `--pairwise-tests`: add pairwise tests to the batch report when justified by the experimental design.
 - `--sam-backend <sam1|sam3>`: choose segmentation backend.
 - `--checkpoint <path>`: model checkpoint path for selected backend.
 - `--sam-model-type <vit_b|vit_l|vit_h>`: SAM1 model type (used when `--sam-backend sam1`).
@@ -202,6 +218,7 @@ Typical artifacts:
 - Raw SAM masks overlay (`*_sam_masks.png`)
 - Per-run JSON result (`*_result.json`)
 - Running CSV summary (`summary.csv`)
+- Status-aware running CSV summary (`summary_v2.csv` for new runs)
 
 ## Configuration
 

@@ -38,12 +38,15 @@ class ReportingAgent:
             qc_status=state.get("qc_status"),
             validation_status=state.get("validation_status"),
             warnings=state.get("warnings", []),
+            count_status=state.get("count_status"),
         )
 
         annotated_path = save_image(annotated, self.settings.output_dir / f"{base_name}_annotated.png")
         raw_sam_masks = state.get("raw_sam_masks", [])
         sam_masks_path = ""
-        if raw_sam_masks:
+        if state.get("raw_sam_overlay") is not None:
+            sam_masks_path = save_image(state["raw_sam_overlay"], self.settings.output_dir / f"{base_name}_sam_masks.png")
+        elif raw_sam_masks:
             sam_overlay = draw_sam_masks_overlay(image=plate_image, raw_masks=raw_sam_masks)
             sam_masks_path = save_image(sam_overlay, self.settings.output_dir / f"{base_name}_sam_masks.png")
         result_payload = {
@@ -51,6 +54,10 @@ class ReportingAgent:
             "metadata": metadata,
             "qc_status": state.get("qc_status"),
             "colony_count": state.get("colony_count"),
+            "count_status": state.get("count_status"),
+            "tntc_texture_fraction": state.get("tntc_texture_fraction"),
+            "raw_sam_mask_count": state.get("raw_sam_mask_count"),
+            "tile_diagnostics": state.get("tile_diagnostics", []),
             "cfu_per_ml": state.get("cfu_per_ml"),
             "validation_status": state.get("validation_status"),
             "warnings": state.get("warnings", []),
@@ -62,7 +69,7 @@ class ReportingAgent:
         with json_path.open("w", encoding="utf-8") as f:
             json.dump(result_payload, f, indent=2)
 
-        csv_path = self.settings.output_dir / "summary.csv"
+        csv_path = self.settings.output_dir / "summary_v2.csv"
         write_header = not csv_path.exists()
         with csv_path.open("a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
@@ -74,7 +81,9 @@ class ReportingAgent:
                     "dilution",
                     "volume",
                     "colony_count",
+                    "count_status",
                     "cfu_per_ml",
+                    "raw_sam_mask_count",
                     "qc_passed",
                     "validation_passed",
                     "warning_count",
@@ -92,7 +101,9 @@ class ReportingAgent:
                     "dilution": metadata.get("dilution"),
                     "volume": metadata.get("volume"),
                     "colony_count": state.get("colony_count"),
+                    "count_status": state.get("count_status"),
                     "cfu_per_ml": state.get("cfu_per_ml"),
+                    "raw_sam_mask_count": state.get("raw_sam_mask_count"),
                     "qc_passed": state.get("qc_status", {}).get("passed"),
                     "validation_passed": state.get("validation_status", {}).get("passed"),
                     "warning_count": len(state.get("warnings", [])),

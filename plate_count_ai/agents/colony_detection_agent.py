@@ -18,9 +18,22 @@ class ColonyDetectionAgent:
         if plate_image is None:
             raise ValueError("ColonyDetectionAgent requires 'plate_image' in state.")
 
+        if self.detector.enable_tiling:
+            detections, raw_count, diagnostics, raw_overlay = self.detector.detect_tiled_with_intermediate(plate_image)
+            return {
+                **state,
+                "detections": detections,
+                "raw_sam_masks": [],
+                "raw_sam_mask_count": raw_count,
+                "tile_diagnostics": diagnostics,
+                "raw_sam_overlay": raw_overlay,
+            }
+
         detections, raw_sam_masks = self.detector.detect_with_intermediate(plate_image)
         return {
             **state,
             "detections": detections,
             "raw_sam_masks": raw_sam_masks,
+            "raw_sam_mask_count": len(raw_sam_masks),
+            "tile_diagnostics": [],
         }

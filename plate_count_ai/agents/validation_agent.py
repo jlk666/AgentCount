@@ -54,12 +54,12 @@ class ValidationAgent:
                 if near_edge:
                     edge_artifacts += 1
 
-        overgrown = colony_count >= self.settings.overgrown_count_threshold
+        overgrown = state.get("count_status") == "TNTC" or colony_count >= self.settings.overgrown_count_threshold
         if merged_colony_pairs > 0:
             warnings.append(f"Potential merged colonies detected: {merged_colony_pairs} overlapping pairs.")
         if edge_artifacts > 0:
             warnings.append(f"Potential edge artifacts detected: {edge_artifacts} colonies near border.")
-        if overgrown:
+        if overgrown and state.get("count_status") != "TNTC":
             warnings.append("Plate may be overgrown based on high colony count.")
 
         passed = not overgrown and merged_colony_pairs == 0

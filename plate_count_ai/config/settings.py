@@ -27,6 +27,9 @@ class Settings:
     sam_text_prompt: str = os.getenv("SAM_TEXT_PROMPT", "bacterial colonies")
     sam_text_prompts: str = os.getenv("SAM_TEXT_PROMPTS", "")
     sam_enable_image_enhancement: bool = os.getenv("SAM_ENABLE_IMAGE_ENHANCEMENT", "1") == "1"
+    sam_use_tiling: bool = os.getenv("SAM_USE_TILING", "1") == "1"
+    sam_tile_size: int = int(os.getenv("SAM_TILE_SIZE", "1008"))
+    sam_tile_overlap: int = int(os.getenv("SAM_TILE_OVERLAP", "252"))
     sam_checkpoint_url: str = os.getenv(
         "SAM_CHECKPOINT_URL",
         "",
@@ -50,6 +53,7 @@ class Settings:
     # Counting quality thresholds (microbiology guidance range)
     min_recommended_colonies: int = 30
     max_recommended_colonies: int = 300
+    tntc_texture_fraction_threshold: float = float(os.getenv("TNTC_TEXTURE_FRACTION_THRESHOLD", "0.70"))
 
     # Validation thresholds
     edge_margin_ratio: float = 0.03

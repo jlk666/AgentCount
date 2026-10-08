@@ -75,6 +75,11 @@ def _load_batch_from_csv(csv_path: Path, metadata_template: dict[str, Any]) -> l
                 text = value.strip()
                 if text == "":
                     continue
+                if key == "volume_ml":
+                    key = "volume"
+                if key == "is_negative_control":
+                    md[key] = text.lower() in {"1", "true", "yes"}
+                    continue
                 if key in {"dilution", "volume"}:
                     try:
                         md[key] = float(text)
@@ -85,6 +90,8 @@ def _load_batch_from_csv(csv_path: Path, metadata_template: dict[str, Any]) -> l
 
             if not md.get("sample_id"):
                 md["sample_id"] = image_path.stem
+            if md.get("is_negative_control") is True:
+                md["dilution"] = None
             items.append({"image_path": str(image_path), "metadata": md})
     return items
 
@@ -114,10 +121,11 @@ def _build_insight_inputs(
             "volume_ml":     md.get("volume", ""),
             "colony_count":  cnt,
             "cfu_per_ml":    cfu,
+            "count_status":  state.get("count_status", ""),
         })
-        if cnt is not None:
+        if cnt is not None and state.get("count_status") == "countable_candidate":
             count_groups.setdefault(key, []).append(float(cnt))
-        if cfu is not None:
+        if cfu is not None and state.get("count_status") == "countable_candidate":
             cfu_groups.setdefault(key, []).append(float(cfu))
 
     def _ttests(groups: dict[str, list[float]]) -> list[dict[str, Any]]:
@@ -147,7 +155,7 @@ def _write_batch_summary(outputs: list[dict[str, Any]], output_dir: Path, label:
     """Write a clean summary CSV for a completed batch run."""
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     csv_path = output_dir / f"{label}_summary_{timestamp}.csv"
-    fieldnames = ["sample", "replicate", "dilution", "volume_ml", "colony_count", "cfu_per_ml"]
+    fieldnames = ["sample", "replicate", "dilution", "volume_ml", "colony_count", "count_status", "cfu_per_ml"]
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -159,6 +167,7 @@ def _write_batch_summary(outputs: list[dict[str, Any]], output_dir: Path, label:
                 "dilution": md.get("dilution", ""),
                 "volume_ml": md.get("volume", ""),
                 "colony_count": state.get("colony_count", ""),
+                "count_status": state.get("count_status", ""),
                 "cfu_per_ml": state.get("cfu_per_ml", ""),
             })
     return csv_path
@@ -170,6 +179,11 @@ def main() -> None:
     parser.add_argument("--metadata", type=str, help="Metadata JSON string")
     parser.add_argument("--batch-dir", type=str, help="Directory with plate images")
     parser.add_argument("--batch-csv", type=str, help="CSV with image_path and metadata columns")
+    parser.add_argument("--output-dir", type=str, help="Directory for output images and reports")
+    parser.add_argument("--no-tiling", action="store_true", help="Disable overlapping SAM3 tiles")
+    parser.add_argument("--tile-size", type=int, help="SAM3 tile size in pixels (default: 1008)")
+    parser.add_argument("--tile-overlap", type=int, help="SAM3 tile overlap in pixels (default: 252)")
+    parser.add_argument("--pairwise-tests", action="store_true", help="Include pairwise tests when the experimental design supports them")
     parser.add_argument(
         "--sam-backend",
         type=str,
@@ -203,6 +217,14 @@ def main() -> None:
         config_overrides["sam_model_type"] = args.sam_model_type
     if args.sam_text_prompt:
         config_overrides["sam_text_prompt"] = args.sam_text_prompt
+    if args.output_dir:
+        config_overrides["output_dir"] = Path(args.output_dir)
+    if args.no_tiling:
+        config_overrides["sam_use_tiling"] = False
+    if args.tile_size is not None:
+        config_overrides["sam_tile_size"] = args.tile_size
+    if args.tile_overlap is not None:
+        config_overrides["sam_tile_overlap"] = args.tile_overlap
 
     if config_overrides.get("sam_backbone") == "sam1" and "detector_model_path" not in config_overrides:
         config_overrides["detector_model_path"] = "sam_vit_b_01ec64.pth"
@@ -228,11 +250,14 @@ def main() -> None:
         run_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         summary_path = _write_batch_summary(outputs, cfg.output_dir, label=label)
         summary_rows, count_ttests, cfu_ttests = _build_insight_inputs(outputs)
+        if not args.pairwise_tests:
+            count_ttests, cfu_ttests = [], []
         insights = insight_agent.generate(summary_rows, count_ttests, cfu_ttests)
         report_path = cfg.output_dir / f"{label}_report_{run_ts}.html"
         generate_batch_report(outputs, report_path, logo_path=logo_path,
                               run_label=label, timestamp=run_ts,
-                              insights=insights, llm_model=cfg.llm_model)
+                              insights=insights, llm_model=cfg.llm_model,
+                              include_pairwise_tests=args.pairwise_tests)
         logger.info("Batch analysis complete. Results produced: %d", len(outputs))
         logger.info("Batch summary CSV: %s", summary_path)
         logger.info("Batch HTML report: %s", report_path)
@@ -249,11 +274,14 @@ def main() -> None:
         run_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         summary_path = _write_batch_summary(outputs, cfg.output_dir, label=label)
         summary_rows, count_ttests, cfu_ttests = _build_insight_inputs(outputs)
+        if not args.pairwise_tests:
+            count_ttests, cfu_ttests = [], []
         insights = insight_agent.generate(summary_rows, count_ttests, cfu_ttests)
         report_path = cfg.output_dir / f"{label}_report_{run_ts}.html"
         generate_batch_report(outputs, report_path, logo_path=logo_path,
                               run_label=label, timestamp=run_ts,
-                              insights=insights, llm_model=cfg.llm_model)
+                              insights=insights, llm_model=cfg.llm_model,
+                              include_pairwise_tests=args.pairwise_tests)
         logger.info("CSV batch analysis complete. Results produced: %d", len(outputs))
         logger.info("Batch summary CSV: %s", summary_path)
         logger.info("Batch HTML report: %s", report_path)

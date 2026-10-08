@@ -13,6 +13,20 @@ class CFUCalculationAgent:
         metadata = state.get("metadata", {})
         warnings = list(state.get("warnings", []))
 
+        if metadata.get("is_negative_control") is True:
+            return {
+                **state,
+                "cfu_per_ml": None,
+                "warnings": warnings + ["Negative control: sample CFU/mL is not applicable."],
+            }
+
+        if state.get("count_status") == "TNTC":
+            return {
+                **state,
+                "cfu_per_ml": None,
+                "warnings": warnings + ["TNTC plate: a numeric CFU/mL estimate is not reported."],
+            }
+
         dilution = float(metadata.get("dilution", 0.0))
         volume = float(metadata.get("volume", 0.0))
 
