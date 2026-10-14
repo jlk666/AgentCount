@@ -1,0 +1,56 @@
+# Python cache and virtualenvs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.conda/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# ML model weights and checkpoints (large files)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+*.pb
+*.h5
+*.tflite
+*.engine
+checkpoints/
+
+# Generated outputs and local test assets
+plate_count_ai/outputs/
+plate_count_ai/data/uploads/
+testPngs/
+RealData/
+AGAR_bench/
+evaluation/tiled_dev/
+evaluation/tiled_dev_*/
+
+# Generated real-data evaluation tables, reports, and images
+evaluation/*.csv
+evaluation/*.json
+evaluation/*.html
+evaluation/*.png
+evaluation/*.jpg
+evaluation/*.jpeg
+evaluation/*.webp
+evaluation/*.svg
+
+# Common large archives/artifacts
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Cluster associated files
+*.sbatch
+slurm_logs/
+.hf_cache/

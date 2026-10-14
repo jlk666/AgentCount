@@ -1,0 +1,74 @@
+"""Central runtime settings for the plate counting system."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import os
+from pathlib import Path
+
+import torch
+
+
+@dataclass(slots=True)
+class Settings:
+    """Application configuration with sensible research defaults."""
+
+    project_root: Path = Path(__file__).resolve().parents[1]
+    data_dir: Path = project_root / "data"
+    output_dir: Path = project_root / "outputs"
+    upload_dir: Path = data_dir / "uploads"
+
+    # Model configuration (Meta Segment Anything)
+    sam_backbone: str = os.getenv("SAM_BACKBONE", "sam3")
+    detector_model_path: str = os.getenv("SAM_CHECKPOINT", "checkpoints/sam3.pt")
+    sam_model_type: str = "vit_b"
+    sam_model_config: str = os.getenv("SAM_MODEL_CONFIG", "configs/sam3/sam3_hiera_b+.yaml")
+    sam_text_prompt: str = os.getenv("SAM_TEXT_PROMPT", "bacterial colonies")
+    sam_text_prompts: str = os.getenv("SAM_TEXT_PROMPTS", "")
+    sam_enable_image_enhancement: bool = os.getenv("SAM_ENABLE_IMAGE_ENHANCEMENT", "1") == "1"
+    sam_use_tiling: bool = os.getenv("SAM_USE_TILING", "1") == "1"
+    sam_tile_size: int = int(os.getenv("SAM_TILE_SIZE", "1008"))
+    sam_tile_overlap: int = int(os.getenv("SAM_TILE_OVERLAP", "252"))
+    sam_checkpoint_url: str = os.getenv(
+        "SAM_CHECKPOINT_URL",
+        "",
+    )
+    auto_download_sam_checkpoint: bool = os.getenv("SAM_AUTO_DOWNLOAD", "0") == "1"
+    sam_points_per_side: int = 32
+    sam_pred_iou_thresh: float = 0.88
+    sam_stability_score_thresh: float = 0.92
+    sam_min_mask_region_area: int = 20
+    min_colony_area_ratio: float = 0.00002
+    max_colony_area_ratio: float = 0.015
+    min_colony_circularity: float = 0.2
+    nms_iou_threshold: float = 0.3
+
+    # QC thresholds
+    blur_threshold: float = 100.0
+    underexposed_mean_threshold: float = 45.0
+    overexposed_mean_threshold: float = 210.0
+    plate_presence_score_threshold: float = 0.5
+
+    # Counting quality thresholds (microbiology guidance range)
+    min_recommended_colonies: int = 30
+    max_recommended_colonies: int = 300
+    tntc_texture_fraction_threshold: float = float(os.getenv("TNTC_TEXTURE_FRACTION_THRESHOLD", "0.70"))
+
+    # Validation thresholds
+    edge_margin_ratio: float = 0.03
+    merge_iou_threshold: float = 0.15
+    overgrown_count_threshold: int = 500
+
+    # Local LLM (Ollama) for batch insight extraction
+    llm_enabled: bool = os.getenv("LLM_ENABLED", "1") == "1"
+    llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:7b")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "120"))
+
+    @property
+    def device(self) -> str:
+        """Select CUDA if available, otherwise CPU."""
+        return "cuda:0" if torch.cuda.is_available() else "cpu"
+
+
+settings = Settings()
